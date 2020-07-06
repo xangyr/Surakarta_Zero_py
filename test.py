@@ -20,8 +20,6 @@ import scipy.stats
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 
-
-
 def create_uci_labels():
     labels_array = []
 
@@ -98,7 +96,7 @@ class leaf_node(object):
         tot_p = 1e-8
         action_probs = tf.squeeze(action_probs)
         for action in moves:
-            board = GameBoard.make_move(action, self.board[:])
+            board = GameBoard.make_move(action, self.board)
             mov_p = action_probs[label2i[action]]
             new_node = leaf_node(self, mov_p, board)
             self.child[action] = new_node
@@ -193,10 +191,6 @@ class MCTS_tree(object):
             future = await self.push_queue(positions)  # type: Future
             await future
             action_probs, value = future.result()
-
-            # action_probs, value = self.forward(positions)
-            if self.is_black_turn(current_player):
-                action_probs = cchess_main.flip_policy(action_probs)
 
             moves = GameBoard.move_generate(node.board, current_player)
             # print("current_player : ", current_player)
@@ -304,8 +298,6 @@ class MCTS_tree(object):
             positions = self.generate_inputs(node.board, current_player)
             positions = np.expand_dims(positions, 0)
             action_probs, value = self.forward(positions)
-            if self.is_black_turn(current_player):
-                action_probs = cchess_main.flip_policy(action_probs)
 
             moves = GameBoard.move_generate(node.board, current_player)
             # print("current_player : ", current_player)
@@ -335,10 +327,6 @@ class MCTS_tree(object):
         positions = self.generate_inputs(node.board, current_player)
         positions = np.expand_dims(positions, 0)
         action_probs, value = self.forward(positions)
-        if self.is_black_turn(current_player):
-            action_probs = cchess_main.flip_policy(action_probs)
-
-        # print("action_probs shape : ", action_probs.shape)    #(1, 2086)
 
         if node.board.judge(current_player) != 0:
 
@@ -355,9 +343,37 @@ class MCTS_tree(object):
 
         node.backup(-value)
 
-    def generate_inputs(self, board, current_player):
-        board, player = self.try_flip(board, current_player, self.is_black_turn(current_player))
-        return self.state_to_positions(board)
+    def generate_inputs(self, board_stack, current_player):
+        inputs = np.zeros([6,6,17])
+        if current_player is 1:
+            for i in range(8):
+                for j in range(6):
+                    for k in range(6):
+                        if(board_stack[0][7 - i][j][k] == -current_player):
+                            inputs[j][k][16 - i] = 1
+            for i in range(8):
+                for j in range(6):
+                    for k in range(6):
+                        if (board_stack[1][7 - i][j][k] == current_player):
+                            inputs[j][k][8 - i] = 1
+            for i in range(6):
+                for j in range(6):
+                    inputs[i][j][0] = 1
+        else:
+            for i in range(8):
+                for j in range(6):
+                    for k in range(6):
+                        if (board_stack[1][7 - i][j][k] == -current_player):
+                            inputs[j][k][16 - i] = 1
+            for i in range(8):
+                for j in range(6):
+                    for k in range(6):
+                        if (board_stack[0][7 - i][j][k] == current_player):
+                            inputs[j][k][8 - i] = 1
+            for i in range(6):
+                for j in range(6):
+                    inputs[i][j][0] = -1
+        return inputs
 
 
 
@@ -385,11 +401,6 @@ class GameBoard(object):
             for j in range(6):
                 print(board[i][j], " ", end="")
             print()
-        '''
-        for i in range(6):
-            total = ' '.join(board[i])
-            print(total)
-        '''
 
     def judge(self, currentplayer):
         if currentplayer == -1:  # blackchess -1
@@ -446,13 +457,9 @@ class GameBoard(object):
     @staticmethod
     def extract_rool(game_board, index):
         exrool_s = []
-        exrool_chess_s = []
         exrool = []
         exrool_chess = []
-        inrool_s = []
         exrool_chess_s = []
-        inrool = []
-        inrool_chess = []
 
         for i in range(6):
             exrool.append(game_board.board[index][i])
@@ -781,5 +788,6 @@ if __name__ == '__main__':
 
     print('Run test for move generator in', time.time() - start)
 '''
-    label = create_uci_labels()
-    create_ucilabels()
+    inputs = np.zeros([6, 6, 17])
+    inputs[0] = np.ones([6,6])
+    print(inputs)
