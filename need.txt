@@ -3,20 +3,23 @@ lines need to change since change
     to
     board[6][6]
 
-439             rows = state.split('/')
+# commented are finished modified
 
-285             if (node.state.find('K') == -1 or node.state.find('k') == -1):
-                if (node.state.find('K') == -1):
-                    value = 1.0 if current_player == "b" else -1.0
-                if (node.state.find('k') == -1):
-                    value = -1.0 if current_player == "b" else 1.0
+#   439             rows = state.split('/')
+#
+#   285             if (node.state.find('K') == -1 or node.state.find('k') == -1):
+#                   if (node.state.find('K') == -1):
+#                       value = 1.0 if current_player == "b" else -1.0
+#                   if (node.state.find('k') == -1):
+#                       value = -1.0 if current_player == "b" else 1.0
+#
+#   392             if (node.state.find('K') == -1 or node.state.find('k') == -1):
+#                   if (node.state.find('K') == -1):
+#                       value = 1.0 if current_player == "b" else -1.0
+#                   if (node.state.find('k') == -1):
+#                       value = -1.0 if current_player == "b" else 1.0
 
-392             if (node.state.find('K') == -1 or node.state.find('k') == -1):
-                if (node.state.find('K') == -1):
-                    value = 1.0 if current_player == "b" else -1.0
-                if (node.state.find('k') == -1):
-                    value = -1.0 if current_player == "b" else 1.0
-
+TODO modified following lines
 423             def state_to_positions(self, board):
                 # TODO C plain x 2
                 board_state = self.replace_board_tags(state)

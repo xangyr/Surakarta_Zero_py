@@ -282,12 +282,12 @@ class MCTS_tree(object):
             # evolve game board status
             # child_position = self.env_action(position, action_t)
 
-            if (node.state.find('K') == -1 or node.state.find('k') == -1):
-                if (node.state.find('K') == -1):
-                    value = 1.0 if current_player == "b" else -1.0
-                if (node.state.find('k') == -1):
-                    value = -1.0 if current_player == "b" else 1.0
+            if node.board.judge(current_player) != 0:
+
+                value = 1.0 if node.board.judge(current_player) == 1 else -1.0
+                value = -1.0 if node.board.judge(current_player) == -1 else 1.0
                 value = value * -1
+
             elif restrict_round >= 60:
                 value = 0.0
             else:
@@ -389,11 +389,11 @@ class MCTS_tree(object):
 
         # print("action_probs shape : ", action_probs.shape)    #(1, 2086)
 
-        if (node.state.find('K') == -1 or node.state.find('k') == -1):
-            if (node.state.find('K') == -1):
-                value = 1.0 if current_player == "b" else -1.0
-            if (node.state.find('k') == -1):
-                value = -1.0 if current_player == "b" else 1.0
+        if node.board.judge(current_player) != 0:
+
+            value = 1.0 if node.board.judge(current_player) == 1 else -1.0
+            value = -1.0 if node.board.judge(current_player) == -1 else 1.0
+            value = value * -1
         elif restrict_round >= 60:
             value = 0.0
         else:
@@ -436,7 +436,7 @@ class MCTS_tree(object):
         if not flip:
             return board, current_player
 
-        rows = state.split('/')
+        rows = [''.join(i) for i in board]                  #output rows in format ['000000', '111111', '222222', '333333', '444444', '555555']
 
         def swapcase(a):
             if a.isalpha():
@@ -476,6 +476,28 @@ class GameBoard(object):
             for j in range(6):
                 print(board[i][j], " ", end="")
             print()
+        '''
+        for i in range(6):
+            total = ' '.join(board[i])
+            print(total)
+        '''
+
+
+    def judge(self, currentplayer):
+        if currentplayer == -1:  # blackchess -1
+            if self.blackNum == 0:
+                return -1
+            elif self.whiteNum == 0:
+                return 1
+            else:
+                return 0
+        elif currentplayer == 1:  # whitechess 1
+            if self.blackNum == 0:
+                return 1
+            elif self.whiteNum == 0:
+                return -1
+            else:
+                return 0
 
     @staticmethod
     def move_generate(game_board, current_player):
@@ -498,8 +520,8 @@ class GameBoard(object):
                 if game_board.board[i][j] is current_player:
                     for k in range(i - 1, i + 2):
                         for l in range(j - 1, j + 2):
-                            if k >= 0 and k <= 5:
-                                if (l >= 0 and l <= 5):
+                            if 0 <= k <= 5:
+                                if 0 <= l <= 5:
                                     if i is not k or j is not l:
                                         if game_board.board[k][l] is 0:
                                             moves.append(Move(i, j, k, l))
@@ -672,6 +694,51 @@ class GameBoard(object):
     @staticmethod
     def make_move(self, in_action, board):
         return 0
+
+    def softmax(x):
+        # print(x)
+        probs = np.exp(x - np.max(x))
+        # print(np.sum(probs))
+        probs /= np.sum(probs)
+        return probs
+
+
+class surakarta(object):
+    def __init__(self, playout=400, in_batch_size=128, exploration=True, in_search_threads=16, processor="cpu",
+                 num_gpus=1, res_block_nums=7, human_color='b'):
+        self.epochs = 5
+        self.playout_counts = playout  # 400    #800    #1600    200
+        self.temperature = 1  # 1e-8    1e-3
+        # self.c = 1e-4
+        self.batch_size = in_batch_size  # 128    #512
+        # self.momentum = 0.9
+        self.game_batch = 400  # Evaluation each 400 times
+        # self.game_loop = 25000
+        self.top_steps = 30
+        self.top_temperature = 1  # 2
+        # self.Dirichlet = 0.3    # P(s,a) = (1 - ϵ)p_a  + ϵη_a    #self-play chapter in the paper
+        self.eta = 0.03
+        # self.epsilon = 0.25
+        # self.v_resign = 0.05
+        # self.c_puct = 5
+        self.learning_rate = 0.001  # 5e-3    #    0.001
+        self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
+        self.buffer_size = 10000
+        self.data_buffer = deque(maxlen=self.buffer_size)
+        self.game_borad = GameBoard()
+        self.processor = processor
+        # self.current_player = 'w'    #“w”表示红方，“b”表示黑方。
+        self.policy_value_netowrk = policy_value_network(self.lr_callback,
+                                                         res_block_nums) if processor == 'cpu' else policy_value_network_gpus(
+            num_gpus, res_block_nums)
+        self.search_threads = in_search_threads
+        self.mcts = MCTS_tree(self.game_borad.state, self.policy_value_netowrk.forward, self.search_threads)
+        self.exploration = exploration
+        self.resign_threshold = -0.8  # 0.05
+        self.global_step = 0
+        self.kl_targ = 0.025
+        self.log_file = open(os.path.join(os.getcwd(), 'log_file.txt'), 'w')
+        self.human_color = human_color
 
 
 # gameBoard = GameBoard()
