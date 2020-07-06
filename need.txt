@@ -1,0 +1,33 @@
+lines need to change since change
+    state, '-1-1-1-1-1-1/-1-1-1-1-1-1/6/6/111111/111111'
+    to
+    board[6][6]
+
+# commented are finished modified
+
+#   439             rows = state.split('/')
+#
+#   285             if (node.state.find('K') == -1 or node.state.find('k') == -1):
+#                   if (node.state.find('K') == -1):
+#                       value = 1.0 if current_player == "b" else -1.0
+#                   if (node.state.find('k') == -1):
+#                       value = -1.0 if current_player == "b" else 1.0
+#
+#   392             if (node.state.find('K') == -1 or node.state.find('k') == -1):
+#                   if (node.state.find('K') == -1):
+#                       value = 1.0 if current_player == "b" else -1.0
+#                   if (node.state.find('k') == -1):
+#                       value = -1.0 if current_player == "b" else 1.0
+
+TODO modified following lines
+423             def state_to_positions(self, board):
+                # TODO C plain x 2
+                board_state = self.replace_board_tags(state)
+                pieces_plane = np.zeros(shape=(9, 10, 14), dtype=np.float32)
+                for rank in range(9):  # 横线
+                    for file in range(10):  # 直线
+                        v = board_state[rank * 9 + file]
+                        if v.isalpha():
+                            pieces_plane[rank][file][ind[v]] = 1
+                assert pieces_plane.shape == (9, 10, 14)
+                return pieces_plane
