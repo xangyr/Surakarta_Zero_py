@@ -14,12 +14,32 @@ import time
 import argparse
 from collections import deque, defaultdict, namedtuple
 import copy
-from policy_value_network_tf2 import *
-from policy_value_network_gpus_tf2 import *
+# from policy_value_network_tf2 import *
+# from policy_value_network_gpus_tf2 import *
 import scipy.stats
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 
+
+
+def create_uci_labels():
+    labels_array = []
+
+    for i in range(6):
+        for j in range(6):
+            for k in range(6):
+                for l in range(6):
+                    if bool(i is not k) or bool(j is not l):
+                        labels_array.append(str(i) + str(j) +str(k) + str(l))
+
+    return labels_array
+
+def is_kill_move(state_prev, state_next):
+    return state_next.blackNum - state_prev.blackNum + state_next.whiteNum - state_prev.whiteNum
+
+labels_array = create_uci_labels()
+labels_len = len(labels_array)
+label2i = {val: i for i, val in enumerate(labels_array)}
 
 class Move():
     def __init__(self, from_x, from_y, to_x, to_y):
@@ -61,79 +81,24 @@ class leaf_node(object):
         return self.child == {}
 
     def get_Q_plus_U_new(self, c_puct):
-        """Calculate and return the value for this node: a combination of leaf evaluations, Q, and
-        this node's prior adjusted for its visit count, u
-        c_puct -- a number in (0, inf) controlling the relative impact of values, Q, and
-            prior probability, P, on this node's score.
-        """
-        # self._u = c_puct * self._P * np.sqrt(self._parent._n_visits) / (1 + self._n_visits)
-        U = c_puct * self.P * np.sqrt(self.parent.N) / (1 + self.N)
-        return self.Q + U
+        u = c_puct * self.P * np.sqrt(self.parent.N) / (1 + self.N)
+        return self.Q + u
 
     def get_Q_plus_U(self, c_puct):
-        """Calculate and return the value for this node: a combination of leaf evaluations, Q, and
-        this node's prior adjusted for its visit count, u
-        c_puct -- a number in (0, inf) controlling the relative impact of values, Q, and
-            prior probability, P, on this node's score.
-        """
-        # self._u = c_puct * self._P * np.sqrt(self._parent._n_visits) / (1 + self._n_visits)
         self.U = c_puct * self.P * np.sqrt(self.parent.N) / (1 + self.N)
         return self.Q + self.U
 
-    # def select_move_by_action_score(self, noise=True):
-    #
-    #     # P = params[self.lookup['P']]
-    #     # N = params[self.lookup['N']]
-    #     # Q = params[self.lookup['W']] / (N + 1e-8)
-    #     # U = c_PUCT * P * np.sqrt(np.sum(N)) / (1 + N)
-    #
-    #     ret_a = None
-    #     ret_n = None
-    #     action_idx = {}
-    #     action_score = []
-    #     i = 0
-    #     for a, n in self.child.items():
-    #         U = c_PUCT * n.P * np.sqrt(n.parent.N) / ( 1 + n.N)
-    #         action_idx[i] = (a, n)
-    #
-    #         if noise:
-    #             action_score.append(n.Q + U * (0.75 * n.P + 0.25 * dirichlet([.03] * (go.N ** 2 + 1))) / (n.P + 1e-8))
-    #         else:
-    #             action_score.append(n.Q + U)
-    #         i += 1
-    #         # if(n.Q + n.U > max_Q_plus_U):
-    #         #     max_Q_plus_U = n.Q + n.U
-    #         #     ret_a = a
-    #         #     ret_n = n
-    #
-    #     action_t = int(np.argmax(action_score[:-1]))
-    #
-    #     return ret_a, ret_n
-    #     # return action_t
     def select_new(self, c_puct):
         return max(self.child.items(), key=lambda node: node[1].get_Q_plus_U_new(c_puct))
 
     def select(self, c_puct):
-        # max_Q_plus_U = 1e-10
-        # ret_a = None
-        # ret_n = None
-        # for a, n in self.child.items():
-        #     n.U = c_puct * n.P * np.sqrt(n.parent.N) / ( 1 + n.N)
-        #     if(n.Q + n.U > max_Q_plus_U):
-        #         max_Q_plus_U = n.Q + n.U
-        #         ret_a = a
-        #         ret_n = n
-        # return ret_a, ret_n
         return max(self.child.items(), key=lambda node: node[1].get_Q_plus_U(c_puct))
 
-    # @profile
     def expand(self, moves, action_probs):
         tot_p = 1e-8
-        # print("action_probs : ", action_probs)
-        action_probs = tf.squeeze(action_probs)  # .flatten()   #.squeeze()
-        # print("expand action_probs shape : ", action_probs.shape)
+        action_probs = tf.squeeze(action_probs)
         for action in moves:
-            board = GameBoard.make_move(action, self.board)
+            board = GameBoard.make_move(action, self.board[:])
             mov_p = action_probs[label2i[action]]
             new_node = leaf_node(self, mov_p, board)
             self.child[action] = new_node
@@ -146,10 +111,8 @@ class leaf_node(object):
         self.N += 1
         self.W += value
         self.v = value
-        self.Q = self.W / self.N  # node.Q += 1.0*(value - node.Q) / node.N
+        self.Q = self.W / self.N
         self.U = c_PUCT * self.P * np.sqrt(self.parent.N) / (1 + self.N)
-        # node = node.parent
-        # value = -value
 
     def backup(self, value):
         node = self
@@ -184,9 +147,7 @@ class MCTS_tree(object):
         self.running_simulation_num = 0
 
     def reload(self):
-        self.root - leaf_node(None, self.p_, '-1-1-1-1-1-1/-1-1-1-1-1-1/6/6/111111/111111')
-        '''self.root = leaf_node(None, self.p_,
-                              "RNBAKABNR/9/1C5C1/P1P1P1P1P/9/9/p1p1p1p1p/1c5c1/9/rnbakabnr")  # "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR"'''
+        self.root = leaf_node(None, self.p_, GameBoard().board)
         self.expanded = set()
 
     def Q(self, move) -> float:  # type hint, Q() returns float
@@ -207,38 +168,28 @@ class MCTS_tree(object):
         self.root.parent = None
 
     def is_expanded(self, key) -> bool:
-        """Check expanded status"""
         return key in self.expanded
 
     async def tree_search(self, node, current_player, restrict_round) -> float:
-        """Independent MCTS, stands for one simulation"""
         self.running_simulation_num += 1
 
-        # reduce parallel search number
         with await self.sem:
             value = await self.start_tree_search(node, current_player, restrict_round)
-            # logger.debug(f"value: {value}")
-            # logger.debug(f'Current running threads : {RUNNING_SIMULATION_NUM}')
             self.running_simulation_num -= 1
 
             return value
 
     async def start_tree_search(self, node, current_player, restrict_round) -> float:
-        """Monte Carlo Tree search Select,Expand,Evauate,Backup"""
         now_expanding = self.now_expanding
 
         while node in now_expanding:
             await asyncio.sleep(1e-4)
 
-        if not self.is_expanded(node):  # and node.is_leaf()
-            """is leaf node try evaluate and expand"""
-            # add leaf node to expanding list
+        if not self.is_expanded(node):
             self.now_expanding.add(node)
 
             positions = self.generate_inputs(node.board, current_player)
-            # positions = np.expand_dims(positions, 0)
 
-            # push extracted dihedral features of leaf node to the evaluation queue
             future = await self.push_queue(positions)  # type: Future
             await future
             action_probs, value = future.result()
@@ -405,51 +356,9 @@ class MCTS_tree(object):
         node.backup(-value)
 
     def generate_inputs(self, board, current_player):
-        board, palyer = self.try_flip(board, current_player, self.is_black_turn(current_player))
+        board, player = self.try_flip(board, current_player, self.is_black_turn(current_player))
         return self.state_to_positions(board)
 
-    def replace_board_tags(self, board):
-        board = board.replace("2", "11")
-        board = board.replace("3", "111")
-        board = board.replace("4", "1111")
-        board = board.replace("5", "11111")
-        board = board.replace("6", "111111")
-        board = board.replace("7", "1111111")
-        board = board.replace("8", "11111111")
-        board = board.replace("9", "111111111")
-        return board.replace("/", "")
-
-    # 感觉位置有点反了，当前角色的棋子在右侧，plane的后面
-    def state_to_positions(self, board):
-        # TODO C plain x 2
-        board_state = self.replace_board_tags(state)
-        pieces_plane = np.zeros(shape=(9, 10, 14), dtype=np.float32)
-        for rank in range(9):  # 横线
-            for file in range(10):  # 直线
-                v = board_state[rank * 9 + file]
-                if v.isalpha():
-                    pieces_plane[rank][file][ind[v]] = 1
-        assert pieces_plane.shape == (9, 10, 14)
-        return pieces_plane
-
-    def try_flip(self, board, current_player, flip=False):
-        if not flip:
-            return board, current_player
-
-        rows = [''.join(i) for i in board]                  #output rows in format ['000000', '111111', '222222', '333333', '444444', '555555']
-
-        def swapcase(a):
-            if a.isalpha():
-                return a.lower() if a.isupper() else a.upper()
-            return a
-
-        def swapall(aa):
-            return "".join([swapcase(a) for a in aa])
-
-        return "/".join([swapall(row) for row in reversed(rows)]), ('w' if current_player == 'b' else 'b')
-
-    def is_black_turn(self, current_player):
-        return current_player == 'b'
 
 
 class GameBoard(object):
@@ -481,7 +390,6 @@ class GameBoard(object):
             total = ' '.join(board[i])
             print(total)
         '''
-
 
     def judge(self, currentplayer):
         if currentplayer == -1:  # blackchess -1
@@ -691,19 +599,29 @@ class GameBoard(object):
 
         return moves
 
-    @staticmethod
-    def make_move(self, in_action, board):
-        return 0
+    def make_move(self, move, board):
+        origin = board[move.to_x][move.to_y]
+        player = board[move.from_x][move.from_x]
+        board[move.from_x][move.from_y] = 0
+        board[move.to_x][move.to_y] = player
+        if origin is -1:
+            self.blackNum = self.blackNum - 1
+        elif origin is 1:
+            self.whiteNum = self.whiteNum - 1
+        return board
 
-    def softmax(x):
-        # print(x)
-        probs = np.exp(x - np.max(x))
-        # print(np.sum(probs))
-        probs /= np.sum(probs)
-        return probs
+    def is_game_over(self):
+        if self.blackNum is 0:
+            return -1
+        elif self.whiteNum is 0:
+            return 1
+        else:
+            return False
+
 
 
 class surakarta(object):
+
     def __init__(self, playout=400, in_batch_size=128, exploration=True, in_search_threads=16, processor="cpu",
                  num_gpus=1, res_block_nums=7, human_color='b'):
         self.epochs = 5
@@ -740,19 +658,113 @@ class surakarta(object):
         self.log_file = open(os.path.join(os.getcwd(), 'log_file.txt'), 'w')
         self.human_color = human_color
 
+    def run(self):
+        batch_iter = 0
+        try:
+            while (True):
+                batch_iter += 1
+                play_data, episode_len = self.selfplay()
+                print("batch i:{}, episode_len:{}".format(batch_iter, episode_len))
+                extend_data = []
+                # states_data = []
+                for state, mcts_prob, winner in play_data:
+                    states_data = self.mcts.state_to_positions(state)
+                    # prob = np.zeros(labels_len)
+                    # for idx in range(len(mcts_prob[0][0])):
+                    #     prob[label2i[mcts_prob[0][0][idx]]] = mcts_prob[0][1][idx]
+                    extend_data.append((states_data, mcts_prob, winner))
+                self.data_buffer.extend(extend_data)
+                if len(self.data_buffer) > self.batch_size:
+                    self.policy_update()
+                # if (batch_iter) % self.game_batch == 0:
+                #     print("current self-play batch: {}".format(batch_iter))
+                #     win_ratio = self.policy_evaluate()
+        except KeyboardInterrupt:
+            self.log_file.close()
+            self.policy_value_netowrk.save(self.global_step)
 
-# gameBoard = GameBoard()
-# gameBoard.print_board(gameBoard.board)
-# gameBoard.move_generate(gameBoard, -1)
+
+    def get_action(self, board, temperature=1e-3):
+
+        self.mcts.main(board, self.game_borad.current_player, self.game_borad.restrict_round, self.playout_counts)
+
+        actions_visits = [(act, nod.N) for act, nod in self.mcts.root.child.items()]
+        actions, visits = zip(*actions_visits)
+        probs = softmax(1.0 / temperature * np.log(visits))
+        move_probs = []
+        move_probs.append([actions, probs])
+
+        if (self.exploration):
+            act = np.random.choice(actions, p=0.75 * probs + 0.25 * np.random.dirichlet(0.3 * np.ones(len(probs))))
+        else:
+            act = np.random.choice(actions, p=probs)
+
+        win_rate = self.mcts.Q(act)
+        self.mcts.update_tree(act)
+
+        return act, move_probs, win_rate
+
+    def selfplay(self):
+        self.game_borad.reload()
+        states, mcts_probs, current_players = [], [], []
+        z = None
+        game_over = False
+        winnner = ""
+        start_time = time.time()
+        while (not game_over):
+            action, probs, win_rate = self.get_action(self.game_borad.state, self.temperature)
+            states.append(self.game_borad.board)
+            prob = np.zeros(labels_len)
+            for idx in range(len(probs[0][0])):
+                prob[label2i[probs[0][0][idx]]] = probs[0][1][idx]
+            mcts_probs.append(prob)
+            current_players.append(self.game_borad.current_player)
+
+            last_state = self.game_borad
+            self.game_borad.board = GameBoard.make_move(action, self.game_borad.board)
+            self.game_borad.round += 1
+            self.game_borad.current_player = -self.game_borad.current_player
+            if is_kill_move(last_state, self.game_borad) == 0:
+                self.game_borad.restrict_round += 1
+            else:
+                self.game_borad.restrict_round = 0
+
+            # self.game_borad.print_borad(self.game_borad.state, action)
+
+            if (self.game_borad.is_game_over() is not False):
+                z = np.zeros(len(current_players))
+                if (self.game_borad.is_game_over() == -1):
+                    winnner = -1
+                if (self.game_borad.is_game_over() == 1):
+                    winnner = 1
+                z[np.array(current_players) == winnner] = 1.0
+                z[np.array(current_players) != winnner] = -1.0
+                game_over = True
+                print("Game end. Winner is player : ", winnner, " In {} steps".format(self.game_borad.round - 1))
+            elif self.game_borad.restrict_round >= 60:
+                z = np.zeros(len(current_players))
+                game_over = True
+                print("Game end. Tie in {} steps".format(self.game_borad.round - 1))
+            if (game_over):
+                self.mcts.reload()
+        print("Using time {} s".format(time.time() - start_time))
+        return zip(states, mcts_probs, z), len(z)
+
+
+def softmax(x):
+        probs = np.exp(x - np.max(x))
+        probs /= np.sum(probs)
+        return probs
 
 if __name__ == '__main__':
+    '''
     file = open("testMoveGenerate.txt")
     k = int(input('How much tests do you want to take: '))
 
     start = time.time()
     t_board = [[]] * 6
-    '''board[0] = [1,1,1,1,1,1]
-    print(board)'''
+    board[0] = [1,1,1,1,1,1]
+    print(board)
     for tests in range(k):
         for i in range(6):
             t_board[i] = list(map(int, file.readline().split()))
@@ -768,3 +780,6 @@ if __name__ == '__main__':
         assert len(move_w) == meta[3]
 
     print('Run test for move generator in', time.time() - start)
+'''
+    label = create_uci_labels()
+    create_ucilabels()
