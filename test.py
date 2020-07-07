@@ -28,18 +28,21 @@ def create_uci_labels():
             for k in range(6):
                 for l in range(6):
                     if bool(i is not k) or bool(j is not l):
-                        labels_array.append(str(i) + str(j) +str(k) + str(l))
+                        labels_array.append(str(i) + str(j) + str(k) + str(l))
 
     return labels_array
 
+
 def is_kill_move(state_prev, state_next):
     return state_next.blackNum - state_prev.blackNum + state_next.whiteNum - state_prev.whiteNum
+
 
 labels_array = create_uci_labels()
 labels_len = len(labels_array)
 label2i = {val: i for i, val in enumerate(labels_array)}
 
-class Move():
+
+class Move(object):
     def __init__(self, from_x, from_y, to_x, to_y):
         self.from_x = from_x
         self.from_y = from_y
@@ -50,7 +53,7 @@ class Move():
         return self.from_x == other.from_x and self.from_y == other.from_y and self.to_x == other.to_x and self.to_y == other.to_y
 
 
-class Chess():
+class Chess(object):
     def __init__(self, player, x, y):
         self.player = player
         self.x = x
@@ -144,6 +147,24 @@ class MCTS_tree(object):
         self.loop = asyncio.get_event_loop()
         self.running_simulation_num = 0
 
+    def init_b_r(self):
+        self.board_record = []
+        board_b = [
+            [[-1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0],
+             [1, 1, 1, 1, 1, 1],
+             [1, 1, 1, 1, 1, 1]] * 8]
+        board_w = [
+            [[-1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0],
+             [1, 1, 1, 1, 1, 1],
+             [1, 1, 1, 1, 1, 1]] * 8]
+        self.board_record.append(board_b)
+        self.board_record.append(board_w)
+
+    def update_b_r(self, board, current_player = 1):
+        index_r = 1 + current_player >> 32  # -1 1  ->  0 1
+        self.board_record[index_r].insert(0, board)
+        self.board_record[index_r].pop()
+
     def reload(self):
         self.root = leaf_node(None, self.p_, GameBoard().board)
         self.expanded = set()
@@ -158,6 +179,10 @@ class MCTS_tree(object):
         if (find == False):
             print("{} not exist in the child".format(move))
         return ret
+
+    def state_to_positions(self, board, current_player):
+        self.update_b_r(board, current_player)
+        return self.board_record            # 6 * 6 * 16
 
     def update_tree(self, act):
         # if(act in self.root.child):
@@ -380,6 +405,7 @@ class MCTS_tree(object):
 class GameBoard(object):
     board = [[-1, -1, -1, -1, -1, -1], [-1, -1, -1, -1, -1, -1], [0, 0, 0, 0, 0, 0],
              [0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1]]
+
     blackNum = 6
     whiteNum = 6
     state = '-1-1-1-1-1-1/-1-1-1-1-1-1/6/6/111111/111111'
@@ -402,15 +428,15 @@ class GameBoard(object):
                 print(board[i][j], " ", end="")
             print()
 
-    def judge(self, currentplayer):
-        if currentplayer == -1:  # blackchess -1
+    def judge(self, current_player):
+        if current_player == -1:  # blackchess -1
             if self.blackNum == 0:
                 return -1
             elif self.whiteNum == 0:
                 return 1
             else:
                 return 0
-        elif currentplayer == 1:  # whitechess 1
+        elif current_player == 1:  # whitechess 1
             if self.blackNum == 0:
                 return 1
             elif self.whiteNum == 0:
@@ -626,7 +652,6 @@ class GameBoard(object):
             return False
 
 
-
 class surakarta(object):
 
     def __init__(self, playout=400, in_batch_size=128, exploration=True, in_search_threads=16, processor="cpu",
@@ -689,7 +714,6 @@ class surakarta(object):
         except KeyboardInterrupt:
             self.log_file.close()
             self.policy_value_netowrk.save(self.global_step)
-
 
     def get_action(self, board, temperature=1e-3):
 
@@ -759,9 +783,10 @@ class surakarta(object):
 
 
 def softmax(x):
-        probs = np.exp(x - np.max(x))
-        probs /= np.sum(probs)
-        return probs
+    probs = np.exp(x - np.max(x))
+    probs /= np.sum(probs)
+    return probs
+
 
 if __name__ == '__main__':
     '''
@@ -788,6 +813,7 @@ if __name__ == '__main__':
 
     print('Run test for move generator in', time.time() - start)
 '''
+
     inputs = np.zeros([6, 6, 17])
     inputs[0] = np.ones([6,6])
     print(inputs)
